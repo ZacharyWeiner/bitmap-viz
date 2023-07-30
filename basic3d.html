@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style type="text/css">
+        body{
+            background:black;
+            color: white;
+        }
+        .surface{
+            background: black;
+        }
+        #loading {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          z-index: 1;
+          width: 120px;
+          height: 120px;
+          margin: -76px 0 0 -76px;
+          border: 16px solid #f3f3f3;
+          border-radius: 50%;
+          border-top: 16px solid #3498db;
+          -webkit-animation: spin 2s linear infinite;
+          animation: spin 2s linear infinite;
+        }
+
+        @-webkit-keyframes spin {
+          0% { -webkit-transform: rotate(0deg); }
+          100% { -webkit-transform: rotate(360deg); }
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        /* Add animation to "page content" */
+        .animate-bottom {
+          position: relative;
+          -webkit-animation-name: animatebottom;
+          -webkit-animation-duration: 1s;
+          animation-name: animatebottom;
+          animation-duration: 1s
+        }
+
+        @-webkit-keyframes animatebottom {
+          from { bottom:-100px; opacity:0 } 
+          to { bottom:0px; opacity:1 }
+        }
+
+        @keyframes animatebottom { 
+          from{ bottom:-100px; opacity:0 } 
+          to{ bottom:0; opacity:1 }
+        }
+    </style>
+</head>
+<body>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script src="https://threejs.org/build/three.js"></script>
+
+<h2>Bitcoin Transaction Data</h2>
+
+<input type="text" id="blockID" placeholder="Enter Block ID">
+<button onclick="fetchAllPages()">Fetch Data</button>
+<button onclick="downloadCSV()">Download CSV</button>
+
+<div id="threeDMap"></div>
+ <div id="displayData">
+    <table id="transactionTable">
+        <!-- Table headers and data will go here -->
+    </table>
+</div>
+
+
+<script>
+let transactionData = [];
+
+async function fetchPage(page, blockID) {
+    let response = await fetch(`https://chain.api.btc.com/v3/block/${blockID}/tx?page=${page}`);
+    let data = await response.json();
+    return data;
+}
+
+async function fetchAllPages() {
+    let blockID = document.getElementById('blockID').value;
+    if (!blockID) {
+        alert("Please enter a Block ID");
+        return;
+    }
+    
+    let page = 1;
+    transactionData = []; // Reset transaction data for new block ID
+    while (true) {
+        let data = await fetchPage(page, blockID);
+        if (!data.data.list || data.data.list.length === 0) {
+            break;
+        }
+        transactionData = transactionData.concat(data.data.list);
+        page++;
+    }
+    
+        // Display the transactions in a table
+    displayDataInTable();
+}
+// Function to create a dot
+function createDot(color) {
+      var geometry = new THREE.SphereGeometry(0.1, 32, 32);
+      var material = new THREE.MeshBasicMaterial({color: color});
+      return new THREE.Mesh(geometry, material);
+  }
+
+function scaleData(dataPoint, dataMin, dataMax, min, max) {
+    return ((dataPoint - dataMin) / (dataMax - dataMin)) * (max - min) + min;
+}
+
+function createBox(fee, weight, outputs_value) {
+    var geometry = new THREE.BoxGeometry(fee, outputs_value, weight);
+    var material = new THREE.MeshNormalMaterial();
+    return new THREE.Mesh(geometry, material);
+}
+
+function displayDataInTable() {
+    var config = {responsive: true}
+    // Get the table element
+    let table = document.getElementById('transactionTable');
+
+    // Clear any existing data
+    table.innerHTML = '';
+
+    // Add table headers
+    let headerRow = document.createElement('tr');
+    Object.keys(transactionData[0]).forEach(key => {
+        let th = document.createElement('th');
+        th.textContent = key;
+        headerRow.appendChild(th);
+    });
+    table.appendChild(headerRow);
+
+    // Add data rows
+    transactionData.forEach(transaction => {
+        let row = document.createElement('tr');
+        Object.values(transaction).forEach(value => {
+            let td = document.createElement('td');
+            // Check if the value is an array of objects
+            if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+                // Convert the objects to JSON strings
+                value = value.map(v => JSON.stringify(v));
+            }
+            td.textContent = value;
+            row.appendChild(td);
+        });
+        table.appendChild(row);
+    });
+
+    let transactionArray = Object.values(transactionData).filter(td => !td.is_coinbase);
+    // Create a scene, camera, and renderer
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+    var renderer = new THREE.WebGLRenderer();
+
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById("threeDMap").appendChild(renderer.domElement);
+
+
+    
+    let iterator = 0;
+    // Iterate over the transaction data and add dots to the scene
+    transactionArray.forEach(function(transaction) {
+        var fee = scaleData(transaction.fee, Math.min(...transactionData.map(t => t.fee)), Math.max(...transactionData.map(t => t.fee)), 1, 5);
+        var weight = scaleData(transaction.weight, Math.min(...transactionData.map(t => t.weight)), Math.max(...transactionData.map(t => t.weight)), 1, 5);
+        var outputs_value = scaleData(transaction.outputs_value, Math.min(...transactionData.map(t => t.outputs_value)), Math.max(...transactionData.map(t => t.outputs_value)), 1, 5);
+        var box = createBox(fee, weight, outputs_value);
+        var x =  scaleData(transaction.outputs_value, Math.min(...transactionData.map(t => t.outputs_value)), Math.max(...transactionData.map(t => t.outputs_value)), -10, 10);
+        var y = scaleData(transaction.fee, Math.min(...transactionData.map(t => t.fee)), Math.max(...transactionData.map(t => t.fee)), -10, 10);
+        var z = scaleData(transaction.size, Math.min(...transactionData.map(t => t.size)), Math.max(...transactionData.map(t => t.size)), -10, 10);
+        box.position.set(x, y, z);
+        console.log(box);
+        scene.add(box);
+    })
+
+
+    // Position the camera and start the animation loop
+    camera.position.set(0, 0,30);
+    function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+    }
+    animate();
+  }
+
+function downloadCSV() {
+    let csv = 'block_height,block_hash,block_time,created_at,confirmations,fee,hash,inputs_count,inputs_value,is_coinbase,is_double_spend,is_sw_tx,lock_time,outputs_count,outputs_value,sigops,size,version,vsize,weight,witness_hash\n';
+    transactionData.forEach((row) => {
+        csv += `${row.block_height},${row.block_hash},${row.block_time},${row.created_at},${row.confirmations},${row.fee},${row.hash},${row.inputs_count},${row.inputs_value},${row.is_coinbase},${row.is_double_spend},${row.is_sw_tx},${row.lock_time},${row.outputs_count},${row.outputs_value},${row.sigops},${row.size},${row.version},${row.vsize},${row.weight},${row.witness_hash}\n`;
+    });
+
+    let hiddenElement = document.createElement('a');
+    hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+    hiddenElement.target = '_blank';
+    hiddenElement.download = 'transaction_data.csv';
+    hiddenElement.click();
+}
+</script>
+
+</body>
+</html>
