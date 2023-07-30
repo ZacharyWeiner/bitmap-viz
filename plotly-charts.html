@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<style>
+body{
+    background:black;
+    color: white;
+}
+.surface{
+    background: black;
+}
+#loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 120px;
+  height: 120px;
+  margin: -76px 0 0 -76px;
+  border: 16px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 16px solid #3498db;
+  -webkit-animation: spin 2s linear infinite;
+  animation: spin 2s linear infinite;
+}
+
+@-webkit-keyframes spin {
+  0% { -webkit-transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Add animation to "page content" */
+.animate-bottom {
+  position: relative;
+  -webkit-animation-name: animatebottom;
+  -webkit-animation-duration: 1s;
+  animation-name: animatebottom;
+  animation-duration: 1s
+}
+
+@-webkit-keyframes animatebottom {
+  from { bottom:-100px; opacity:0 } 
+  to { bottom:0px; opacity:1 }
+}
+
+@keyframes animatebottom { 
+  from{ bottom:-100px; opacity:0 } 
+  to{ bottom:0; opacity:1 }
+}
+</style>
+<body>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<h2>Bitcoin Transaction Data</h2>
+
+<input type="text" id="blockID" placeholder="Enter Block ID">
+<button onclick="fetchAllPages()">Fetch Data</button>
+<button onclick="downloadCSV()">Download CSV</button>
+<br/>
+<div id="loading"></div>
+<div id="totalTransactions"> </div> 
+<label> Fee Treemap </label>
+<div id="treemap"></div>
+<label> Size Treemap </label>
+<div id="treemap2"></div>
+<label> 3D Bar </label>
+<div id="threeDBar"></div>
+<label> 3D Scatter </label>
+<div id="scatter3d"></div>
+<!-- <label> Heatmap </label>
+<div id="heatmap"></div> -->
+<div id="inputHistogram"></div>
+ <div id="outputHistogram"></div> 
+ <div id="displayData">
+    <table id="transactionTable">
+        <!-- Table headers and data will go here -->
+    </table>
+</div>
+
+
+<script>
+let transactionData = [];
+var config = {responsive: true}
+document.getElementById("loading").style.display = "none";
+
+async function fetchPage(page, blockID) {
+    let response = await fetch(`https://chain.api.btc.com/v3/block/${blockID}/tx?page=${page}`);
+    let data = await response.json();
+    return data;
+}
+
+async function fetchAllPages() {
+    let blockID = document.getElementById('blockID').value;
+    document.getElementById("loading").style.display = "block";
+    if (!blockID) {
+        alert("Please enter a Block ID");
+        return;
+    }
+    
+    let page = 1;
+    transactionData = []; // Reset transaction data for new block ID
+    while (true) {
+        let data = await fetchPage(page, blockID);
+        if (!data.data.list || data.data.list.length === 0) {
+            break;
+        }
+        transactionData = transactionData.concat(data.data.list);
+        page++;
+    }
+    transactionData = transactionData.filter(t => !t.is_coinbase)
+     document.getElementById("totalTransactions").text = transactionData.length + 1;
+        // Display the transactions in a table
+    displayDataInTable();
+    document.getElementById("loading").style.display = "none";
+}
+
+function createTreemap() {
+    var treeData = transactionData.map(function(tx, i) {
+        return {
+            label: 'Transaction ' + (i+1),  // You can replace this with any label you want
+            value: tx.fee  // Replace with any value you want the size to represent
+        };
+    });
+
+    var data = [{
+        type: "treemap",
+        labels: treeData.map(function(tx) { return tx.label; }),
+        parents: treeData.map(function() { return ''; }),
+        values:  treeData.map(function(tx) { return tx.value; }),
+        textinfo: "label+value"
+    }];
+
+    var layout = {margin: {l: 0, r: 0, b: 0, t: 0}, plot_bgcolor:"black",paper_bgcolor:"#FFF3" };
+    Plotly.newPlot('treemap', data, layout);
+
+
+    var treeData2 = transactionData.map(function(tx, i) {
+        return {
+            label: 'Transaction ' + (i+1),  // You can replace this with any label you want
+            value: tx.vsize  // Replace with any value you want the size to represent
+        };
+    });
+
+    var data2 = [{
+        type: "treemap",
+        labels: treeData2.map(function(tx) { return tx.label; }),
+        parents: treeData2.map(function() { return ''; }),
+        values:  treeData2.map(function(tx) { return tx.value; }),
+        textinfo: "label+value"
+    }];
+
+    var layout2 = {margin: {l: 0, r: 0, b: 0, t: 0},  plot_bgcolor:"black",paper_bgcolor:"#FFF3" };
+    Plotly.newPlot('treemap2', data2, layout2);
+}
+
+function create3dBar(){
+    // Prepare your data for Plotly
+    let transactions = transactionData;
+    let trace1 = {
+        x: transactions.map(tx => tx.fee),
+        y: transactions.map(tx => tx.vsize),
+        z: transactions.map(tx => tx.weight),
+        name: 'transactions',
+        type: 'bar3d',
+        marker: {
+            color: 'rgb(23, 190, 207)'
+        }
+    };
+
+    let data = [trace1];
+
+    // Define the layout
+    let layout = {
+        title: 'Transactions',
+        scene: {
+            xaxis: {title: 'Fee'},
+            yaxis: {title: 'Vsize'},
+            zaxis: {title: 'Weight'},
+        },
+        height: 800,
+        width: 800
+    };
+
+    // Render the plot
+    Plotly.newPlot('threeDBar', data, layout);
+
+}
+
+function pearsonCorrelation(arr1, arr2) {
+    var length = arr1.length;
+    var sum1 = 0;
+    var sum2 = 0;
+    var sum1Sq = 0;
+    var sum2Sq = 0;
+    var pSum = 0;
+    for (var i = 0; i < length; i++) {
+        sum1 += arr1[i];
+        sum2 += arr2[i];
+        sum1Sq += Math.pow(arr1[i], 2);
+        sum2Sq += Math.pow(arr2[i], 2);
+        pSum += arr1[i] * arr2[i];
+    }
+    var num = pSum - (sum1 * sum2 / length);
+    var den = Math.sqrt((sum1Sq - Math.pow(sum1, 2) / length) * (sum2Sq - Math.pow(sum2, 2) / length));
+    if (den == 0) {
+        return 0;
+    }
+    return num / den;
+}
+
+function create3dScatter(){
+
+        // Assuming that `transactionData` is your data
+    var data = [{
+        x: transactionData.map(row => row.fee),  // Replace with your data
+        y: transactionData.map(row => row.size), // Replace with your data
+        z: transactionData.map(row => row.weight), // Replace with your data
+        mode: 'markers',
+        type: 'scatter3d',
+        marker: {
+            size: 3,
+            color: 'rgba(23, 190, 207, 0.9)',
+            line: {
+                color: 'rgba(23, 190, 207, 0.9)',
+                width: 0.1
+            },
+            opacity: 0.8
+        }
+    }];
+
+    var layout = {margin: {
+        l: 0,
+        r: 0,
+        b: 0,
+        t: 0
+    }};
+    Plotly.newPlot('scatter3d', data, layout, config);
+}
+
+function displayDataInTable() {
+    var config = {responsive: true}
+    // Get the table element
+    let table = document.getElementById('transactionTable');
+
+    // Clear any existing data
+    table.innerHTML = '';
+
+    // Add table headers
+    let headerRow = document.createElement('tr');
+    Object.keys(transactionData[0]).forEach(key => {
+        let th = document.createElement('th');
+        th.textContent = key;
+        headerRow.appendChild(th);
+    });
+    table.appendChild(headerRow);
+
+    // Add data rows
+    transactionData.forEach(transaction => {
+        let row = document.createElement('tr');
+        Object.values(transaction).forEach(value => {
+            let td = document.createElement('td');
+            // Check if the value is an array of objects
+            if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+                // Convert the objects to JSON strings
+                value = value.map(v => JSON.stringify(v));
+            }
+            td.textContent = value;
+            row.appendChild(td);
+        });
+        table.appendChild(row);
+    });
+    createTreemap();
+    create3dBar();
+    create3dScatter();
+
+    // //Heatmap 
+    // var selectedColumnsData = transactionData.map(function(transaction) {
+    //         return {
+    //             inputs_count: transaction.inputs_count,
+    //             outputs_count: transaction.outputs_count,
+    //             inputs_value: transaction.inputs_value,
+    //             size: transaction.size,
+    //             weight: transaction.weight
+    //         };
+    //     });
+
+    // var inputs_count = selectedColumnsData.map(function(transaction) { return transaction.inputs_count; });
+    // var outputs_count = selectedColumnsData.map(function(transaction) { return transaction.outputs_count; });
+    // var inputs_value = selectedColumnsData.map(function(transaction) { return transaction.inputs_value; });
+    // var size = selectedColumnsData.map(function(transaction) { return transaction.size; });
+    // var weight = selectedColumnsData.map(function(transaction) { return transaction.weight; });
+
+    // var data = [
+    //     {
+    //         z: [
+    //             [pearsonCorrelation(inputs_count, inputs_count), pearsonCorrelation(inputs_count, outputs_count), pearsonCorrelation(inputs_count, inputs_value), pearsonCorrelation(inputs_count, size), pearsonCorrelation(inputs_count, weight)],
+    //             [pearsonCorrelation(outputs_count, inputs_count), pearsonCorrelation(outputs_count, outputs_count), pearsonCorrelation(outputs_count, inputs_value), pearsonCorrelation(outputs_count, size), pearsonCorrelation(outputs_count, weight)],
+    //             [pearsonCorrelation(inputs_value, inputs_count), pearsonCorrelation(inputs_value, outputs_count), pearsonCorrelation(inputs_value, inputs_value), pearsonCorrelation(inputs_value, size), pearsonCorrelation(inputs_value, weight)],
+    //             [pearsonCorrelation(size, inputs_count), pearsonCorrelation(size, outputs_count), pearsonCorrelation(size, inputs_value), pearsonCorrelation(size, size), pearsonCorrelation(size, weight)],
+    //             [pearsonCorrelation(weight, inputs_count), pearsonCorrelation(weight, outputs_count), pearsonCorrelation(weight, inputs_value), pearsonCorrelation(weight, size), pearsonCorrelation(weight, weight)]
+    //         ],
+    //         x: ['inputs_count', 'outputs_count', 'inputs_value', 'size', 'weight'],
+    //         y: ['inputs_count', 'outputs_count', 'inputs_value', 'size', 'weight'],
+    //         type: 'heatmap'
+    //     }
+    // ];
+
+    // Plotly.newPlot('heatmap', data);
+    // //END HEATMAP
+
+    //Begin Histogram for Input/Outputs
+    // Parse the transaction data and create arrays for the counts of inputs and outputs
+    var inputsCount = transactionData.map(function(tx) { return tx.inputs_value; });
+    var fee = transactionData.map(function(tx) { return tx.fee; });
+
+    // Create the histogram for inputs
+    var inputTrace = {
+        x: inputsCount,
+        type: 'histogram',
+        name: 'Inputs Value'
+    };
+    var inputLayout = {
+        title: 'Histogram of Inputs Value',
+        xaxis: {title: 'Inputs Value'},
+        yaxis: {title: 'Frequency'}
+    };
+    Plotly.newPlot('inputHistogram', [inputTrace], inputLayout);
+
+    // Create the histogram for outputs
+    var outputTrace = {
+        x: fee,
+        type: 'histogram',
+        name: 'Outputs Value'
+    };
+    var outputLayout = {
+        title: 'Histogram of Fee Values',
+        xaxis: {title: 'Fee Value'},
+        yaxis: {title: 'Frequency'}
+    };
+    Plotly.newPlot('outputHistogram', [outputTrace], outputLayout, config);
+    //END HISTORGRAM 
+}
+
+
+function downloadCSV() {
+    let csv = 'block_height,block_hash,block_time,created_at,confirmations,fee,hash,inputs_count,inputs_value,is_coinbase,is_double_spend,is_sw_tx,lock_time,outputs_count,outputs_value,sigops,size,version,vsize,weight,witness_hash\n';
+    transactionData.forEach((row) => {
+        csv += `${row.block_height},${row.block_hash},${row.block_time},${row.created_at},${row.confirmations},${row.fee},${row.hash},${row.inputs_count},${row.inputs_value},${row.is_coinbase},${row.is_double_spend},${row.is_sw_tx},${row.lock_time},${row.outputs_count},${row.outputs_value},${row.sigops},${row.size},${row.version},${row.vsize},${row.weight},${row.witness_hash}\n`;
+    });
+
+    let hiddenElement = document.createElement('a');
+    hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+    hiddenElement.target = '_blank';
+    hiddenElement.download = 'transaction_data.csv';
+    hiddenElement.click();
+}
+</script>
+
+</body>
+</html>
