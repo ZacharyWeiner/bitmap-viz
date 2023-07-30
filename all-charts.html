@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitmap Viewer</title>
+
+    <!-- Include Plotly and Three.js libraries -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://threejs.org/build/three.js"></script>
+
+    <style>
+      body {
+          background-color: black;
+          color: white;
+          font-family: Arial, sans-serif;
+          margin: 0;
+          padding: 0;
+      }
+
+      h1 {
+          padding: 20px;
+          text-align: center;
+          background-color: #3498db;
+          color: white;
+      }
+
+      .flex {
+          display: flex;
+          justify-content: space-around;
+          flex-wrap: wrap;
+          padding-left: 20px;
+          padding-right: 20px;
+      }
+
+      .flex > label {
+          flex: 1 0 200px;
+          margin: 2px;
+      }
+
+      #loading {
+          display: none;
+          text-align: center;
+          padding: 20px;
+          font-size: 20px;
+      }
+
+      #chartContainer {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          margin-top: 20px;
+      }
+
+      button {
+          background-color: #3498db;
+          color: white;
+          border: none;
+          padding: 10px 20px;
+          margin: 20px;
+          border-radius: 5px;
+          cursor: pointer;
+      }
+
+      button:hover {
+          background-color: #2980b9;
+      }
+
+      #totalTransactions {
+          text-align: center;
+          font-size: 20px;
+          margin-bottom: 20px;
+      }
+
+      select, input[type="text"], input[type="number"] {
+          padding: 5px;
+          border-radius: 5px;
+          border: 1px solid #ccc;
+          margin: 10px;
+          flex: 1 0 200px;
+          font-size: 16px;
+      }
+
+      #plotlyChartsContainer, #threeDChartContainer, #cssGridContainer, #threeDChartWithControlsContainer {
+          width: 80%;
+          margin-bottom: 20px;
+          background-color: black;
+          padding: 20px;
+          border-radius: 5px;
+      }
+      .grid-item {
+          min-width: 0;
+      }
+      #chartContainer {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+      }
+     #cssGridContainer {
+        display: flex;
+        flex-wrap: wrap;
+      }
+      #treemap {
+        width: 800px;
+        height: 600px;
+      }
+
+      .flex-item {
+        width: 10px;  /* This sets a minimum width for the items */
+        height: 10px; /* This sets a minimum height for the items */
+      }
+
+      .surface{
+          background: black;
+      }
+      #loading {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        z-index: 1;
+        width: 120px;
+        height: 120px;
+        margin: -76px 0 0 -76px;
+        border: 16px solid #f3f3f3;
+        border-radius: 50%;
+        border-top: 16px solid #3498db;
+        -webkit-animation: spin 2s linear infinite;
+        animation: spin 2s linear infinite;
+      }
+
+      @media only screen and (max-width: 768px) {
+          #cssGridContainer {
+              margin-top: 1000px; /* Increase the margin-top for mobile devices */
+          }
+      }
+
+        @-webkit-keyframes spin {
+          0% { -webkit-transform: rotate(0deg); }
+          100% { -webkit-transform: rotate(360deg); }
+        }
+
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        /* Add animation to "page content" */
+        .animate-bottom {
+          position: relative;
+          -webkit-animation-name: animatebottom;
+          -webkit-animation-duration: 1s;
+          animation-name: animatebottom;
+          animation-duration: 1s
+        }
+
+        @-webkit-keyframes animatebottom {
+          from { bottom:-100px; opacity:0 } 
+          to { bottom:0px; opacity:1 }
+        }
+
+        @keyframes animatebottom { 
+          from{ bottom:-100px; opacity:0 } 
+          to{ bottom:0; opacity:1 }
+        }
+    </style>
+</head>
+<body>
+    <h1>Bitmap Viewer</h1>
+    <div id="loading"> </div>
+    <!-- Input elements for selecting the block ID -->
+    <label> Bitmap Block # <input type="text" id="blockID" placeholder="Enter Block ID"> </label>
+
+    <!-- Checkboxes for selecting which charts to generate -->
+    <!-- With these lines -->
+    <div class="flex">
+    <label><input type="radio" name="chartType" id="generatePlotlyCharts" checked> Generate Plotly Charts</label>
+    <label><input type="radio" name="chartType" id="generate3DChart"> Generate 3D Chart</label>
+    <label><input type="radio" name="chartType" id="generateCssGrid"> Generate CSS Grid</label>
+    <label><input type="radio" name="chartType" id="generate3DChartWithControls"> Generate 3D Chart with Controls</label>
+    </div>
+
+    <!-- Dropdown for selecting the dependent value for 2D charts -->
+    <div class="flex"> 
+      <label> Property for  2D Charts 
+          <select id="twoDProperty">
+              <option value="fee">Fee</option>
+              <option value="weight">Weight</option>
+              <option value="outputs_value">Outputs Value</option>
+              <option value="size">Size</option>
+              <option value="inputs_count">Inputs Count</option>
+              <option value="outputs_count">Outputs Count</option>
+          </select>
+      </label>
+    </div> 
+    <div class="flex"> 
+      <!-- Dropdowns for selecting which values to use for each axis in 3D charts -->
+      <label> 3D X Axis 
+          <select id="xProperty" disabled>
+              <option value="fee">Fee</option>
+              <option value="weight">Weight</option>
+              <option value="outputs_value">Outputs Value</option>
+              <option value="size">Size</option>
+              <option value="inputs_count">Inputs Count</option>
+              <option value="outputs_count">Outputs Count</option>
+          </select>
+      </label>
+
+      <label> 3D Y Axis 
+          <select id="yProperty" disabled>
+              <option value="fee">Fee</option>
+              <option value="weight">Weight</option>
+              <option value="outputs_value">Outputs Value</option>
+              <option value="size">Size</option>
+              <option value="inputs_count">Inputs Count</option>
+              <option value="outputs_count">Outputs Count</option>
+          </select>
+      </label>
+
+      <label> 3D Z Axis 
+          <select id="zProperty" disabled>
+              <option value="fee">Fee</option>
+              <option value="weight">Weight</option>
+              <option value="outputs_value">Outputs Value</option>
+              <option value="size">Size</option>
+              <option value="inputs_count">Inputs Count</option>
+              <option value="outputs_count">Outputs Count</option>
+          </select>
+      </label>
+    </div> 
+    <div class="flex"> 
+      <label> Height 
+        <select id="hProperty">
+          <option value="fee">Fee</option>
+          <option value="weight">Weight</option>
+          <option value="outputs_value">Outputs Value</option>
+          <option value="size">Size</option>
+          <option value="inputs_count">Inputs Count</option>
+          <option value="outputs_count">Outputs Count</option>
+        </select>
+      </label>
+        <label> Width 
+        <select id="wProperty">
+          <option value="fee">Fee</option>
+          <option value="weight">Weight</option>
+          <option value="outputs_value">Outputs Value</option>
+          <option value="size">Size</option>
+          <option value="inputs_count">Inputs Count</option>
+          <option value="outputs_count">Outputs Count</option>
+        </select>
+      </label>
+        <label> Depth 
+        <select id="dProperty">
+          <option value="fee">Fee</option>
+          <option value="weight">Weight</option>
+          <option value="outputs_value">Outputs Value</option>
+          <option value="size">Size</option>
+          <option value="inputs_count">Inputs Count</option>
+          <option value="outputs_count">Outputs Count</option>
+        </select>
+      </label>
+    </div>
+    <div class="flex"> 
+      <label> camera x 
+      <input type="number" id="cameraX" placeholder="10"></label>
+      <label> camera y 
+      <input type="number" id="cameraY" placeholder="10"></label>
+      <label> camera z
+      <input type="number" id="cameraZ" placeholder="10"> </label>
+    </div>
+    <!-- Button to fetch data and generate charts -->
+    <button onclick="generateCharts()">Generate Charts</button>
+
+    <!-- Button to clear charts -->
+    <button onclick="clearAll()">Clear All</button>
+    <button onclick="downloadCSV()">Download CSV</button>
+
+    <div id="totalTransactions"> </div>
+    <br/>
+    <br/>
+    <div id="chartContainer">
+      <!-- Containers for the charts -->
+      <div id="charts"></div>
+    </div>  
+
+    <script>
+        // Global variables to hold the fetched data and the chart instances
+        var transactionData = [];
+        var chartInstances = [];
+        document.getElementById("loading").style.display = "none";
+
+        // Function to fetch data from the API
+        async function fetchPage(page, blockID) {
+            let response = await fetch(`https://chain.api.btc.com/v3/block/${blockID}/tx?page=${page}`);
+            let data = await response.json();
+            return data;
+        }
+
+        async function fetchAllPages() {
+            let blockID = document.getElementById('blockID').value;
+            document.getElementById("loading").style.display = "block";
+            if (!blockID) {
+                alert("Please enter a Block ID");
+                return;
+            }
+            
+            let page = 1;
+            transactionData = []; // Reset transaction data for new block ID
+            while (true) {
+                let data = await fetchPage(page, blockID);
+                if (!data.data.list || data.data.list.length === 0) {
+                    break;
+                }
+                transactionData = transactionData.concat(data.data.list);
+                page++;
+            }
+            transactionData = transactionData.filter(t => !t.is_coinbase)
+             let txCount = document.createTextNode(transactionData.length + 1);
+            document.getElementById("totalTransactions").innerHTML = "";
+            document.getElementById("totalTransactions").style.color= "white"; 
+            document.getElementById("totalTransactions").appendChild(txCount)
+            // Display the transactions in a table
+            document.getElementById("loading").style.display = "none";
+        }
+
+        // Functions to generate the charts
+        function generatePlotlyCharts() {
+            var dependentValue = document.getElementById('twoDProperty').value;
+            // Use this value when generating the charts
+            // Your existing code to generate Plotly charts goes here, updated to use the dependentValue
+            var treeData = transactionData.map(function(tx, i) {
+                return {
+                    label: 'Transaction ' + (i+1),  // You can replace this with any label you want
+                    value: tx[dependentValue]  // Replace with any value you want the size to represent
+                };
+            });
+
+            var data = [{
+                type: "treemap",
+                labels: treeData.map(function(tx) { return tx.label; }),
+                parents: treeData.map(function() { return ''; }),
+                values:  treeData.map(function(tx) { return tx.value; }),
+                textinfo: "label+value"
+            }];
+
+            var layout = {margin: {l: 0, r: 0, b: 0, t: 0}, plot_bgcolor:"black",paper_bgcolor:"#FFF3" };
+            Plotly.newPlot('charts', data, layout);
+        }
+
+        function scaleData(dataPoint, dataMin, dataMax, min, max) {
+            return ((dataPoint - dataMin) / (dataMax - dataMin)) * (max - min) + min;
+        }
+
+        function createBox(fee, weight, outputs_value) {
+            var geometry = new THREE.BoxGeometry(fee, outputs_value, weight);
+            var material = new THREE.MeshNormalMaterial();
+            return new THREE.Mesh(geometry, material);
+        }
+        function generate3DChart() {
+             // Create a scene, camera, and renderer
+            var scene = new THREE.Scene();
+            var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+            var renderer = new THREE.WebGLRenderer();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById("charts").appendChild(renderer.domElement);
+            let hProperty = document.getElementById('hProperty').value;
+            let wProperty = document.getElementById('wProperty').value;
+            let dProperty = document.getElementById('dProperty').value;
+
+            
+            let iterator = 0;
+            // Iterate over the transaction data and add dots to the scene
+            transactionData.forEach(function(transaction) {
+                var h = scaleData(transaction[hProperty], Math.min(...transactionData.map(t => t[hProperty])), Math.max(...transactionData.map(t => t[hProperty])), 1, 5);
+                var w = scaleData(transaction[wProperty], Math.min(...transactionData.map(t => t[wProperty])), Math.max(...transactionData.map(t => t[wProperty])), 1, 5);
+                var d = scaleData(transaction[dProperty], Math.min(...transactionData.map(t => t[dProperty])), Math.max(...transactionData.map(t => t[dProperty])), 1, 5);
+                var box = createBox(h, w, d);
+                var x =  scaleData(transaction.outputs_value, Math.min(...transactionData.map(t => t.outputs_value)), Math.max(...transactionData.map(t => t.outputs_value)), -10, 10);
+                var y = scaleData(transaction.fee, Math.min(...transactionData.map(t => t.fee)), Math.max(...transactionData.map(t => t.fee)), -10, 10);
+                var z = scaleData(transaction.size, Math.min(...transactionData.map(t => t.size)), Math.max(...transactionData.map(t => t.size)), -10, 10);
+                box.position.set(x, y, z);
+                console.log(box);
+                scene.add(box);
+            })
+
+
+            // Position the camera and start the animation loop
+            let cx = document.getElementById("cameraX").value > 0 ?  document.getElementById("cameraX").value : 10;
+            let cy = document.getElementById("cameraY").value > 0 ?  document.getElementById("cameraY").value : 10;
+            let cz = document.getElementById("cameraZ").value > 0 ?  document.getElementById("cameraZ").value : 10;
+            camera.position.set(cx, cy, cz);
+            function animate() {
+                requestAnimationFrame(animate);
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+       function generateCssGrid() {
+          var dependentValue = document.getElementById('twoDProperty').value;
+            // Define the maximum width and height
+            const maxSide = 500; // Max side in pixels (since it's square, width and height are equal)
+
+            // Find the minimum and maximum of weight in transactionData
+            const txd = transactionData.filter(r => !r.is_coinbase);
+
+            // Calculate total weight
+            const totalValue = txd.reduce((total, tx) => total + tx[dependentValue], 0);
+
+            // Create the grid container
+            let gridContainer = document.getElementById('charts');
+
+            // Clear any existing children
+            gridContainer.innerHTML = '';
+
+            // Sort transaction data by weight (descending)
+            txd.sort((a, b) => b[dependentValue] - a[dependentValue]);
+
+            // Initialize placement variables
+            let placementX = 0;
+            let placementY = 500;
+            let currentRowHeight = 0;
+
+            // Iterate through transaction data to create squares
+            txd.forEach((tx, index) => {
+                let gridItem = document.createElement('div');
+                gridItem.className = 'grid-item';
+                gridItem.title = `Transaction ${index + 1}`;
+
+                // Calculate the side of the square based on its weight
+                const squareArea = (tx[dependentValue] / totalValue) * maxSide * maxSide;
+                const squareSide = Math.sqrt(squareArea);
+
+                // Apply the width and height to the grid item
+                gridItem.style.width = `${squareSide}px`;
+                gridItem.style.height = `${squareSide}px`;
+                gridItem.style.margin = '2px'
+                gridItem.style.backgroundColor = `rgb(${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`;
+
+                // Update placement position and row height
+                if (placementX + squareSide > maxSide) {
+                    placementX = 0;
+                    placementY += currentRowHeight;
+                    currentRowHeight = squareSide;
+                } else {
+                    currentRowHeight = Math.max(currentRowHeight, squareSide);
+                }
+
+                // Apply the placement to the grid item
+                gridItem.style.position = 'absolute';
+                gridItem.style.left = `${placementX}px`;
+                gridItem.style.top = `${placementY}px`;
+                gridItem.style.margin = '5px';
+
+                // Update placementX for the next item
+                placementX += squareSide;
+
+                // Add the grid item to the container
+                gridContainer.appendChild(gridItem);
+            });
+            gridContainer.style.height = `${placementY + currentRowHeight}px`;
+        }
+
+        function generate3DChartWithControls() {
+            // Get selected properties
+            let xProperty = document.getElementById('xProperty').value;
+            let yProperty = document.getElementById('yProperty').value;
+            let zProperty = document.getElementById('zProperty').value;
+
+            let hProperty = document.getElementById('hProperty').value;
+            let wProperty = document.getElementById('wProperty').value;
+            let dProperty = document.getElementById('dProperty').value;
+
+            let cameraX = document.getElementById('cameraX').value;
+            let cameraY = document.getElementById('cameraY').value;
+            let cameraZ = document.getElementById('cameraZ').value;
+            let blockID = document.getElementById('blockID').value;
+
+            let targetDiv = document.getElementById("charts");
+            targetDiv.innerHTML="";
+            let title = document.createElement("h1");
+            let p = document.createElement("p");
+            title.textContent = `${blockID}`;
+            targetDiv.appendChild(title);
+            p.textContent = `height: ${hProperty}, width: ${wProperty}, depth: ${zProperty}, camera x: ${cameraX}, camera y: ${cameraY}, camera z: ${cameraZ}`;
+            targetDiv.appendChild(p);
+            
+
+            
+
+            let transactionArray = Object.values(transactionData).filter(td => !td.is_coinbase);
+            let grid_size = Math.ceil(Math.sqrt(transactionArray.length)); // Calculate size of the grid
+            let spacing = 10; 
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            // Append the renderer to the target div
+            targetDiv.appendChild(renderer.domElement);
+
+
+            let iterator = 0;
+            // Iterate over the transaction data and add dots to the scene
+            transactionArray.forEach(function( transaction, index) {
+                var h = scaleData(transaction[hProperty], Math.min(...transactionArray.map(t => t[hProperty])), Math.max(...transactionArray.map(t => t[hProperty])), 1, 5);
+                var w = scaleData(transaction[wProperty], Math.min(...transactionArray.map(t => t[wProperty])), Math.max(...transactionArray.map(t => t[wProperty])), 1, 5);
+                var d = scaleData(transaction[dProperty], Math.min(...transactionArray.map(t => t[dProperty])), Math.max(...transactionArray.map(t => t[dProperty])), 1, 5);
+                var box = createBox(h, w, d);
+                // Calculate the position of the block in the grid
+                let grid_x = index % grid_size;
+                let grid_y = Math.floor(index / grid_size);
+
+                // Scale grid positions to scene coordinates
+                var x = scaleData(grid_x, 0, grid_size - 1, -10, 10);
+                var y = scaleData(grid_y, 0, grid_size - 1, -10, 10);
+                var z = scaleData(transaction[zProperty], Math.min(...transactionArray.map(t => t[zProperty])), Math.max(...transactionArray.map(t => t[zProperty])), -10, 10);
+
+                box.position.set(x, y, z);
+                
+                scene.add(box);
+            })
+            console.log(cameraX, cameraY, cameraZ)
+            camera.position.set(cameraX, cameraY, cameraZ);
+
+            // Camera looks at the center of the scene
+            camera.lookAt(scene.position);
+            animate();
+
+        }
+          // Position the camera and start the animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+    
+  
+
+        // Function to generate the charts based on the user's inputs
+       function generateCharts() {
+          document.getElementById('charts').innerHTML = "";
+            fetchAllPages().then(data => {
+                // Only one of these can be true at a time now
+                if (document.getElementById('generatePlotlyCharts').checked) {
+                    generatePlotlyCharts();
+                } else if (document.getElementById('generate3DChart').checked) {
+                    generate3DChart();
+                } else if (document.getElementById('generateCssGrid').checked) {
+                    generateCssGrid();
+                } else if (document.getElementById('generate3DChartWithControls').checked) {
+                    generate3DChartWithControls();
+                }
+            });
+        }
+
+        // Function to clear all the charts
+        function clearAll() {
+            // Code to remove all the charts from the page
+            // Remove all elements from the chart containers
+            document.getElementById('plotlyChartsContainer').innerHTML = '';
+            document.getElementById('threeDChartContainer').innerHTML = '';
+            document.getElementById('cssGridContainer').innerHTML = '';
+            document.getElementById('threeDChartWithControlsContainer').innerHTML = '';
+            
+            // Then remove all the chart instances from the chartInstances array
+            chartInstances = [];
+        }
+
+        var radios = document.getElementsByName('chartType');
+        // document.getElementById('xProperty').disabled = true;
+        // document.getElementById('yProperty').disabled = true;
+        // document.getElementById('zProperty').disabled = true;
+        // document.getElementById('hProperty').disabled = true;
+        // document.getElementById('wProperty').disabled = true;
+        // document.getElementById('dProperty').disabled = true;
+        // document.getElementById('cameraX').disabled = true;
+        // document.getElementById('cameraY').disabled = true;
+        // document.getElementById('cameraZ').disabled = true;
+
+        // Add a 'change' event listener to each radio button
+        for(let i = 0; i < radios.length; i++) {
+            radios[i].addEventListener('change', function() {
+                // If the 'generate3DChart' radio button is selected, enable the controls
+                if(document.getElementById('generate3DChart').checked) {
+                    document.getElementById('hProperty').disabled = false;
+                    document.getElementById('wProperty').disabled = false;
+                    document.getElementById('dProperty').disabled = false;
+                    document.getElementById('cameraX').disabled = false;
+                    document.getElementById('cameraY').disabled = false;
+                    document.getElementById('cameraZ').disabled = false;
+                } 
+                // If the 'generate3DChartWithControls' radio button is selected, enable the controls
+                else if(document.getElementById('generate3DChartWithControls').checked) {
+                    document.getElementById('xProperty').disabled = false;
+                    document.getElementById('yProperty').disabled = false;
+                    document.getElementById('zProperty').disabled = false;
+                    document.getElementById('hProperty').disabled = false;
+                    document.getElementById('wProperty').disabled = false;
+                    document.getElementById('dProperty').disabled = false;
+                    document.getElementById('cameraX').disabled = false;
+                    document.getElementById('cameraY').disabled = false;
+                    document.getElementById('cameraZ').disabled = false;
+                }
+                // If any other radio button is selected, disable all the controls
+                else {
+                    document.getElementById('xProperty').disabled = true;
+                    document.getElementById('yProperty').disabled = true;
+                    document.getElementById('zProperty').disabled = true;
+                    document.getElementById('hProperty').disabled = true;
+                    document.getElementById('wProperty').disabled = true;
+                    document.getElementById('dProperty').disabled = true;
+                    document.getElementById('cameraX').disabled = true;
+                    document.getElementById('cameraY').disabled = true;
+                    document.getElementById('cameraZ').disabled = true;
+                }
+            });
+        }
+
+        function downloadCSV() {
+          let csv = 'block_height,block_hash,block_time,created_at,confirmations,fee,hash,inputs_count,inputs_value,is_coinbase,is_double_spend,is_sw_tx,lock_time,outputs_count,outputs_value,sigops,size,version,vsize,weight,witness_hash\n';
+          transactionData.forEach((row) => {
+              csv += `${row.block_height},${row.block_hash},${row.block_time},${row.created_at},${row.confirmations},${row.fee},${row.hash},${row.inputs_count},${row.inputs_value},${row.is_coinbase},${row.is_double_spend},${row.is_sw_tx},${row.lock_time},${row.outputs_count},${row.outputs_value},${row.sigops},${row.size},${row.version},${row.vsize},${row.weight},${row.witness_hash}\n`;
+          });
+
+          let hiddenElement = document.createElement('a');
+          hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+          hiddenElement.target = '_blank';
+          hiddenElement.download = 'transaction_data.csv';
+          hiddenElement.click();
+      }
+    </script>
+</body>
+</html>
