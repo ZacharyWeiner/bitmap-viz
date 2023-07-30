@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head> 
+<style>
+   #gridWrapper {
+        position: relative;
+        width: 500px;
+        height: 700px;
+    }
+  #gridContainer {
+    width: 500px;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.grid-item {
+  background: blue;
+  margin: 2px;
+}
+body{
+    background:black;
+    color: white;
+}
+.surface{
+    background: black;
+}
+#loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 120px;
+  height: 120px;
+  margin: -76px 0 0 -76px;
+  border: 16px solid #f3f3f3;
+  border-radius: 50%;
+  border-top: 16px solid #3498db;
+  -webkit-animation: spin 2s linear infinite;
+  animation: spin 2s linear infinite;
+}
+
+@-webkit-keyframes spin {
+  0% { -webkit-transform: rotate(0deg); }
+  100% { -webkit-transform: rotate(360deg); }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Add animation to "page content" */
+.animate-bottom {
+  position: relative;
+  -webkit-animation-name: animatebottom;
+  -webkit-animation-duration: 1s;
+  animation-name: animatebottom;
+  animation-duration: 1s
+}
+
+@-webkit-keyframes animatebottom {
+  from { bottom:-100px; opacity:0 } 
+  to { bottom:0px; opacity:1 }
+}
+
+@keyframes animatebottom { 
+  from{ bottom:-100px; opacity:0 } 
+  to{ bottom:0; opacity:1 }
+}
+</style>
+</head>
+<body>
+<h2>Bitcoin Transaction Data</h2>
+<div id="loading"> </div>
+<input type="text" id="blockID" placeholder="Enter Block ID">
+<button onclick="fetchAllPages()">Fetch Data</button>
+<button onclick="downloadCSV()">Download CSV</button>
+
+<div id="gridWrapper">
+    <div id="gridContainer"></div>
+</div>
+
+
+<div id="displayData">
+    <table id="transactionTable">
+        <!-- Table headers and data will go here -->
+    </table>
+</div>
+
+<script>
+let transactionData = [];
+document.getElementById("loading").style.display = "none";
+async function fetchPage(page, blockID) {
+    let response = await fetch(`https://chain.api.btc.com/v3/block/${blockID}/tx?page=${page}`);
+    let data = await response.json();
+    return data;
+}
+
+async function fetchAllPages() {
+    let blockID = document.getElementById('blockID').value;
+    document.getElementById("loading").style.display = "block";
+    if (!blockID) {
+        alert("Please enter a Block ID");
+        return;
+    }
+    
+    let page = 1;
+    transactionData = []; // Reset transaction data for new block ID
+    while (true) {
+        let data = await fetchPage(page, blockID);
+        if (!data.data.list || data.data.list.length === 0) {
+            break;
+        }
+        transactionData = transactionData.concat(data.data.list);
+        page++;
+    }
+    
+        // Display the transactions in a table
+    document.getElementById("loading").style.display = "none";
+    displayDataInTable();
+}
+
+// function createGrid() {
+//   // Define the range of the width and height
+//   const widthRange = [10, 200]; // Min and Max width in pixels
+//   const heightRange = [10, 200]; // Min and Max height in pixels
+
+//   // Find the minimum and maximum of weight and fee in transactionData
+//   const weightMin = Math.min(...transactionData.map(tx => tx.weight));
+//   const weightMax = Math.max(...transactionData.map(tx => tx.weight));
+//   const feeMin = Math.min(...transactionData.map(tx => tx.fee));
+//   const feeMax = Math.max(...transactionData.map(tx => tx.fee));
+
+//   // Create the grid container
+//   let gridContainer = document.getElementById('gridContainer');
+
+//   // Clear any existing children
+//   gridContainer.innerHTML = '';
+//   transactionData = transactionData.filter(r => !r.is_coinbase)
+//   // Iterate through transaction data to create squares
+//   transactionData.forEach((tx, index) => {
+//       let gridItem = document.createElement('div');
+//       gridItem.className = 'grid-item';
+//       gridItem.style.backgroundColor = 'blue';
+//       gridItem.style.margin = '1px';
+//       gridItem.title = `Transaction ${index + 1}`;
+
+//       // Normalize the weight and fee values to fit the defined range
+//       const normWidth = ((tx.weight - weightMin) / (weightMax - weightMin)) * (widthRange[1] - widthRange[0]) + widthRange[0];
+//       const normHeight = ((tx.fee - feeMin) / (feeMax - feeMin)) * (heightRange[1] - heightRange[0]) + heightRange[0];
+
+//       // Apply the width and height to the grid item
+//       gridItem.style.width = `${Math.min(normWidth, widthRange[1])}px`;
+//       gridItem.style.height = `${Math.min(normHeight, heightRange[1])}px`;
+
+//       // Add the grid item to the container
+//       gridContainer.appendChild(gridItem);
+//   });
+// }
+
+function createGrid() {
+    // Define the maximum width and height
+    const maxSide = 500; // Max side in pixels (since it's square, width and height are equal)
+
+    // Find the minimum and maximum of weight in transactionData
+    const txd = transactionData.filter(r => !r.is_coinbase);
+
+    // Calculate total weight
+    const totalWeight = txd.reduce((total, tx) => total + tx.weight, 0);
+
+    // Create the grid container
+    let gridContainer = document.getElementById('gridContainer');
+
+    // Clear any existing children
+    gridContainer.innerHTML = '';
+
+    // Sort transaction data by weight (descending)
+    txd.sort((a, b) => b.weight - a.weight);
+
+    // Initialize placement variables
+    let placementX = 0;
+    let placementY = 0;
+    let currentRowHeight = 0;
+
+    // Iterate through transaction data to create squares
+    txd.forEach((tx, index) => {
+        let gridItem = document.createElement('div');
+        gridItem.className = 'grid-item';
+        gridItem.title = `Transaction ${index + 1}`;
+
+        // Calculate the side of the square based on its weight
+        const squareArea = (tx.weight / totalWeight) * maxSide * maxSide;
+        const squareSide = Math.sqrt(squareArea);
+
+        // Apply the width and height to the grid item
+        gridItem.style.width = `${squareSide}px`;
+        gridItem.style.height = `${squareSide}px`;
+        gridItem.style.backgroundColor = `rgb(${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`;
+
+        // Update placement position and row height
+        if (placementX + squareSide > maxSide) {
+            placementX = 0;
+            placementY += currentRowHeight;
+            currentRowHeight = squareSide;
+        } else {
+            currentRowHeight = Math.max(currentRowHeight, squareSide);
+        }
+
+        // Apply the placement to the grid item
+        gridItem.style.position = 'absolute';
+        gridItem.style.left = `${placementX}px`;
+        gridItem.style.top = `${placementY}px`;
+        gridItem.style.margin = '5px';
+
+        // Update placementX for the next item
+        placementX += squareSide;
+
+        // Add the grid item to the container
+        gridContainer.appendChild(gridItem);
+    });
+    gridContainer.style.height = `${placementY + currentRowHeight}px`;
+}
+
+function displayDataInTable() {
+    // Get the table element
+    let table = document.getElementById('transactionTable');
+
+    // Clear any existing data
+    table.innerHTML = '';
+
+    // Add table headers
+    let headerRow = document.createElement('tr');
+    Object.keys(transactionData[0]).forEach(key => {
+        let th = document.createElement('th');
+        th.textContent = key;
+        headerRow.appendChild(th);
+    });
+    table.appendChild(headerRow);
+
+    // Add data rows
+    transactionData.forEach(transaction => {
+        let row = document.createElement('tr');
+        Object.values(transaction).forEach(value => {
+            let td = document.createElement('td');
+            // Check if the value is an array of objects
+            if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+                // Convert the objects to JSON strings
+                value = value.map(v => JSON.stringify(v));
+            }
+            td.textContent = value;
+            row.appendChild(td);
+        });
+        table.appendChild(row);
+    });
+
+    createGrid();
+}
+
+
+function downloadCSV() {
+    let csv = 'block_height,block_hash,block_time,created_at,confirmations,fee,hash,inputs_count,inputs_value,is_coinbase,is_double_spend,is_sw_tx,lock_time,outputs_count,outputs_value,sigops,size,version,vsize,weight,witness_hash\n';
+    transactionData.forEach((row) => {
+        csv += `${row.block_height},${row.block_hash},${row.block_time},${row.created_at},${row.confirmations},${row.fee},${row.hash},${row.inputs_count},${row.inputs_value},${row.is_coinbase},${row.is_double_spend},${row.is_sw_tx},${row.lock_time},${row.outputs_count},${row.outputs_value},${row.sigops},${row.size},${row.version},${row.vsize},${row.weight},${row.witness_hash}\n`;
+    });
+
+    let hiddenElement = document.createElement('a');
+    hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+    hiddenElement.target = '_blank';
+    hiddenElement.download = 'transaction_data.csv';
+    hiddenElement.click();
+}
+</script>
+
+</body>
+</html>
